@@ -1,209 +1,135 @@
-import React, { useState, useEffect ,useLayoutEffect} from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import "./Twubric.css";
-import "bootstrap/dist/css/bootstrap.min.css";
-import { Collapse } from "react-bootstrap";
-import ReactDatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
+import DatePicker from 'react-datepicker';
+import 'react-datepicker/dist/react-datepicker.css';
+import 'bootstrap/dist/css/bootstrap.min.css';
 
-const SortButtons = ({ onSort }) => {
-  const [open, setOpen] = useState(false);
+const TwubricApp = () => {
+  const [followers, setFollowers] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAscending, setIsAscending] = useState(true);
+  const [sortKey, setSortKey] = useState(null);
+  const [startDate, setStartDate] = useState(null);
+  const [endDate, setEndDate] = useState(null);
+
+  useEffect(() => {
+    axios
+      .get("https://gist.githubusercontent.com/pandemonia/21703a6a303e0487a73b2610c8db41ab/raw/82e3ef99cde5b6e313922a5ccce7f38e17f790ac/twubric.json")
+      .then(response => {
+        setFollowers(response.data);
+        setIsLoading(false);
+      })
+      .catch(error => {
+        console.error("There was an error fetching the followers:", error);
+        setIsLoading(false);
+      });
+  }, []);
+
+  const handleSort = useCallback((key) => {
+    setIsAscending(prevIsAscending => (sortKey !== key ? true : !prevIsAscending));
+    setSortKey(key);
+  }, [sortKey]);
+
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === 't') handleSort('total');
+      else if (event.key === 'f') handleSort('friends');
+      else if (event.key === 'i') handleSort('influence');
+      else if (event.key === 'c') handleSort('chirpiness');
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleSort]);
+
+  const removeFollower = uid => {
+    setFollowers(currentFollowers => currentFollowers.filter(follower => follower.uid !== uid));
+  };
+
+  const filteredAndSortedFollowers = React.useMemo(() => {
+    return followers.filter(follower => {
+      const joinDate = new Date(follower.join_date);
+      return (!startDate || joinDate >= startDate) && (!endDate || joinDate <= endDate);
+    }).sort((a, b) => {
+      if (!sortKey) return 0;
+      const valueA = a.twubric[sortKey];
+      const valueB = b.twubric[sortKey];
+      return isAscending ? valueA - valueB : valueB - valueA;
+    });
+  }, [followers, sortKey, isAscending, startDate, endDate]);
+
   return (
-    <>
-      <button
-        className="btn btn-primary mb-2"
-        onClick={() => setOpen(!open)}
-        aria-controls="sort-buttons-collapse"
-        aria-expanded={open}
-      >
-        Sort By
-      </button>
-      <Collapse in={open}>
-        <div id="sort-buttons-collapse mb-2">
-          <div className="card card-body">
-            <button
-              className="btn btn-light"
-              onClick={() => onSort("total")}
-              title="Press T to sort by Score"
-            >
-              {" "}
-              Score
-            </button>
-            <button
-              className="btn btn-light"
-              onClick={() => onSort("friends")}
-              title="Press F to sort by Friends"
-            >
-              Friends
-            </button>
-            <button
-              className="btn btn-light"
-              onClick={() => onSort("influence")}
-              title="Press I to sort by Influence"
-            >
-              Influence
-            </button>
-            <button
-              className="btn btn-light"
-              onClick={() => onSort("chirpiness")}
-              title="Press C to sort by Chirpiness"
-            >
-              Chirpiness
+    <div>
+      {isLoading ? <p>Loading...</p> : (
+        <div className="container mt-3">
+          <div className="d-flex justify-content-center align-items-center flex-wrap mb-2">
+            <DatePicker
+              selected={startDate}
+              onChange={date => setStartDate(date)}
+              selectsStart
+              startDate={startDate}
+              endDate={endDate}
+              isClearable
+              placeholderText="Start date"
+              dateFormat="yyyy-MM-dd"
+              minDate={new Date('1970-01-01')}
+              showYearDropdown
+              dropdownMode="select"
+              yearDropdownItemNumber={50}
+              className="form-control"
+            />
+            <DatePicker
+              selected={endDate}
+              onChange={date => setEndDate(date)}
+              selectsEnd
+              startDate={startDate}
+              endDate={endDate}
+              minDate={startDate}
+              isClearable
+              placeholderText="End date"
+              dateFormat="yyyy-MM-dd"
+              showYearDropdown
+              dropdownMode="select"
+              className="form-control"
+            />
+            <button className="btn btn-primary" onClick={() => handleSort("total")}>Sort by Total {isAscending ? "↑" : "↓"}</button>
+            <button className="btn btn-primary" onClick={() => handleSort("friends")}>Sort by Friends {isAscending ? "↑" : "↓"}</button>
+            <button className="btn btn-primary" onClick={() => handleSort("influence")}>Sort by Influence {isAscending ? "↑" : "↓"}</button>
+            <button className="btn btn-primary" onClick={() => handleSort("chirpiness")}>Sort by Chirpiness {isAscending ? "↑" : "↓"}</button>
+          </div>
+          <div className="container mt-3">
+  <div className="d-flex justify-content-center align-items-center flex-wrap mb-2">
+    {/* DatePickers and Buttons go here */}
+  </div>
+  <div className="row g-3">
+    {filteredAndSortedFollowers.map((follower) => (
+      <div key={follower.uid} className="col-12 col-sm-6 col-lg-3">
+        <div className="card h-100">
+          <div className="card-body">
+            <img src={follower.image} alt={follower.fullname} className="rounded-circle mb-2" style={{ width: "50px", height: "50px" }} />
+            <h5 className="card-title">{follower.fullname}</h5>
+            <p className="card-text">Join Date: {new Date(follower.join_date).toLocaleDateString()}</p>
+            <p className="card-text">Twubric:</p>
+            <ul>
+              <li>Total: {follower.twubric.total}</li>
+              <li>Friends: {follower.twubric.friends}</li>
+              <li>Influence: {follower.twubric.influence}</li>
+              <li>Chirpiness: {follower.twubric.chirpiness}</li>
+            </ul>
+            <button className="btn btn-danger" onClick={() => removeFollower(follower.uid)}>
+              Remove
             </button>
           </div>
         </div>
-      </Collapse>
-    </>
+      </div>
+    ))}
+  </div>
+</div>
+
+        </div>
+      )}
+    </div>
   );
 };
 
-const Twubric = () => {
-  const [followers, setFollowers] = useState([]);
-  const [sortField, setSortField] = useState("");
-  const [sortOrder, setSortOrder] = useState("asc");
-  const [startDate, setStartDate] = useState(null);
-  const [endDate, setEndDate] = useState(null);
-  const [filteredFollowers, setFilteredFollowers] = useState([]);
-  const minDate = new Date("1970-01-01T00:00:00Z");
-
-  const handleRemove = (uid) => {
-    setFilteredFollowers((currentFollowers) =>
-      currentFollowers.filter((follower) => follower.uid !== uid)
-    );
-  };
-
-  useEffect(() => {
-    const fetchData = async () => {
-      const result = await axios(
-        "https://gist.githubusercontent.com/pandemonia/21703a6a303e0487a73b2610c8db41ab/raw/82e3ef99cde5b6e313922a5ccce7f38e17f790ac/twubric.json"
-      );
-      setFollowers(result.data);
-      setFilteredFollowers(result.data); // Initialize filtered followers with all data initially
-    };
-
-    fetchData();
-  }, []);
-
-  useEffect(() => {
-    // Filter followers based on the start and end date
-    const filtered = followers.filter((follower) => {
-      const joinDate = new Date(follower.join_date);
-      return (
-        (!startDate || joinDate >= startDate) &&
-        (!endDate || joinDate <= endDate)
-      );
-    });
-
-    // Apply the date filter along with the current sorting
-    handleSort(sortField, filtered);
-  }, [startDate, endDate, followers]); // Depend on startDate and endDate to re-filter when changed
-
-  const handleSort = (field, followersToSort = filteredFollowers) => {
-    const order = sortField === field && sortOrder === "asc" ? "desc" : "asc";
-    setSortField(field);
-    setSortOrder(order);
-
-    const sortedFollowers = followersToSort.sort((a, b) => {
-      const valueA = a.twubric[field];
-      const valueB = b.twubric[field];
-      if (valueA < valueB) {
-        return order === "asc" ? -1 : 1;
-      }
-      if (valueA > valueB) {
-        return order === "asc" ? 1 : -1;
-      }
-      return 0;
-    });
-
-    setFilteredFollowers([...sortedFollowers]); // Spread into a new array to trigger state update
-  };
-  useEffect(() => {
-    const handleKeyPress = (event) => {
-      // Define key codes for different sorting
-      // e.g., "s" for sorting by score, "f" for friends, "i" for influence, "c" for chirpiness
-      switch (event.key) {
-        case "t":
-          handleSort("total");
-          break;
-        case "f":
-          handleSort("friends");
-          break;
-        case "i":
-          handleSort("influence");
-          break;
-        case "c":
-          handleSort("chirpiness");
-          break;
-        // Add more cases as needed
-      }
-    };
-
-    window.addEventListener("keypress", handleKeyPress);
-
-    // Cleanup the event listener on component unmount
-    return () => {
-      window.removeEventListener("keypress", handleKeyPress);
-    };
-  }, [handleSort]);
-
-  return (
-    <>
-      <SortButtons onSort={handleSort} />
-      {/* Datepicker Section */}
-      <div className="date-picker-container">
-        <ReactDatePicker
-          selected={startDate}
-          onChange={(date) => setStartDate(date)}
-          isClearable
-          placeholderText="Start Date"
-          className="date-picker"
-          minDate={new Date("1970-01-04")}
-          dateFormat="MMM d, yyyy"
-          openToDate={new Date("1970-01-04")} // Open to January 1970
-          dropdownMode="select"
-          showYearDropdown
-          showMonthDropdown
-        />
-      </div>
-      {/* Grid Container */}
-      <div className="grid-container">
-        {filteredFollowers.map((follower) => (
-          <div className="card" key={follower.uid} style={{ width: "18rem" }}>
-            {/* Image placeholder if needed */}
-            <img
-              src={follower.image}
-              className="card-img-top"
-              alt="image"
-            ></img>
-            <div className="card-body">
-              <h5 className="card-title">{follower.fullname}</h5>
-              <p className="card-text">{`Score: ${follower.twubric.total}`}</p>
-            </div>
-            <ul className="list-group list-group-flush">
-              <li className="list-group-item">{`Friends: ${follower.twubric.friends}`}</li>
-              <li className="list-group-item">{`Influence: ${follower.twubric.influence}`}</li>
-              <li className="list-group-item">{`Chirpiness: ${follower.twubric.chirpiness}`}</li>
-            </ul>
-            <div className="card-body">
-              <a href="#" className="card-body">{` ${new Date(
-                follower.join_date
-              ).toLocaleDateString("en-US", {
-                month: "short",
-                day: "numeric",
-                year: "numeric",
-              })}`}</a>
-              <button
-                className="card-link btn btn-danger"
-                onClick={() => handleRemove(follower.uid)}
-              >
-                Remove
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </>
-  );
-};
-
-export default Twubric;
+export default TwubricApp;
